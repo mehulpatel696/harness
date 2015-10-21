@@ -1,8 +1,8 @@
 /*
- * cachetest.c -- Test implementation of multithreaded file cache
- *
- * The disk has NBLOCKS of data; the cache stores many fewer.
- * Our stub assumes a cache size of one block, the trivial case.
+ Mehul Patel
+ cachetest.s
+ Problem Set 1
+ Question 2 Part 8
  */
 
 #include <stdlib.h>
@@ -12,17 +12,27 @@
 #include <math.h>
 #include <string.h>
 
+
 #define NTHREADS 10
 #define NTESTS 10
 #define NBLOCKS 100
 #define BLOCKSIZE sizeof(int)
 
+
+//Global Variables
+static int countOrder;
+static scond_t orderPositive;
+static scond_t orderZero;
+
+
+//Prototypes
 static void tester(int n);
 static void cacheinit();
 static void readblock(char *, int);
 static void writeblock(char *, int);
 
 /* the data being stored and fetched */
+
 static char blockData[NBLOCKS][BLOCKSIZE];
 
 /* randomblock
@@ -31,6 +41,7 @@ static char blockData[NBLOCKS][BLOCKSIZE];
  * us a uniform distribution, and we discard each option with probability
  * 1-1/blocknum
  */
+
 
 int randomblock() {
     int candidate;
@@ -41,6 +52,7 @@ int randomblock() {
             return candidate;
     }
 }
+
 
 /* read/write 100 blocks, randomly distributed */
 void tester(int n)
@@ -90,9 +102,11 @@ int main(int argc, char **argv)
     return ret;
 }
 
+
 /* simulated disk block routines
  * simulate out of order completion by the disk
  * by sleeping for up to 100us */
+
 void dblockread(char *block, int blocknum) {
     memcpy(block, blockData[blocknum], BLOCKSIZE);
     sthread_sleep(0, rand() % 100000);
@@ -125,57 +139,33 @@ static int orderArray[CACHESIZE];
 // when a block needs to be put in, it replaces block at index at front of this
 // when a block is initialized/reused, its index is put at the end of orderArray
 
-static int orderCount;
 
-// if orderArray is being reshuffled, orderCount == -1
-// if orderArray is not accessed by anyone, orderCount == 0
-// if orderArray is accessed by threads, orderCount > 0
-static scond_t orderZero; // signals that orderCount is 0
-static scond_t orderPositive; // signals that orderCount is >= 0
 
 
 /* Cache routines */
-
-// Reshuffles the orderArray
-// orderArray must be protected during reshuffling! - not provided in function
 void putToEnd(int indexTemp) {
-    // indexTemp is the index in orderArray that needs to be put to end of it
-    // notice that indexTemp refers to *contents* of orderArray, not its indices
     
     int i;
-    int startPosition = 0; // from which place up do we reshuffle
-    
-    for (i = 0; i < CACHESIZE; i++) { // look through the orderArray
-        if (orderArray[i] == indexTemp) { // find indexTemp in orderArray
-            startPosition = i; // this is the first place to reshuffle
-        }
-    }
-    
-    for (i = startPosition; i < (CACHESIZE-1); i++) { // reshuffling
-        orderArray[i] = orderArray[i+1]; // move things up
-    }
+    int startPosition = 0;
+    for (i = 0; i < CACHESIZE; i++)  if (orderArray[i] == indexTemp) startPosition = i;
+    for (i = startPosition; i < (CACHESIZE-1); i++)  orderArray[i] = orderArray[i+1];
     orderArray[CACHESIZE-1] = indexTemp; // put indexTemp at the end
+    
 }
-//----------------------------------------------------------------------------------<
 
+//Edited
 void cacheinit() {
     scond_init(&orderZero);
     scond_init(&orderPositive);
     smutex_init(&mutex);
-    //cache.dirty = false;
-    //cache.blocknum = INVALID;
+    // initalize i
     int i;
-    orderCount = 0; // make sure orderCount is initialized
-    for (i = 0; i < CACHESIZE; i++ ) { // initialize all blockcaches
+    orderCount = 0;    for (i = 0; i < CACHESIZE; i++ ) {
         smutex_init(&cache[i].mutex);
         cache[i].dirty = false;
         cache[i].blocknum = INVALID;
     }
-    
-    for (i = 0; i < CACHESIZE; i++) { // initialize orderArray with 0-CACHESIZE
-        // needs to be this way because we initially, we allocate stuff in order
-        orderArray[i] = i;
-    }
+    for (i = 0; i < CACHESIZE; i++)  orderArray[i] = i;
 }
 
 
@@ -185,8 +175,10 @@ void readblock(char *block, int blocknum) {
     
     //The Counter
     int i;
-    //If Cached if found
+    
+    //If Cached is found
     int foundCache = -1;
+    
     //The index to replace
     int replaceIndex = 0;
     
@@ -255,8 +247,7 @@ void readblock(char *block, int blocknum) {
     countOrder -= 1;
     smutex_unlock(&mutex);
     
-    putToEnd(replaceIndex); // updates the orderArray
-    
+    putToEnd(replaceIndex);
     smutex_lock(&mutex);
     countOrder += 1;
     scond_broadcast(&orderZero, &mutex);
@@ -268,10 +259,13 @@ void readblock(char *block, int blocknum) {
 void writeblock(char *block, int blocknum) {
     
     int i;
-    int foundCache = -1; // where is the block with correct blocknum in cache
-    int replaceIndex = 0; // which index do we replace?
+    //int j,k,i;
     
-    // redundant, rebroadcast (to make sure the threads start)
+    //int cacheCounter;
+    
+    int foundCache = -1;
+    int replaceIndex = 0;
+    
     smutex_lock(&mutex);
     if (countOrder == 0) {
         scond_broadcast(&orderZero, &mutex);
@@ -319,7 +313,7 @@ void writeblock(char *block, int blocknum) {
         cache[replaceIndex].dirty = true;
         memcpy(cache[replaceIndex].block, block, BLOCKSIZE);
         
-        smutex_unlock(&cache[replaceIndex].mutex); // unlock the blockcache
+        smutex_unlock(&cache[replaceIndex].mutex);
     }
     
     smutex_lock(&mutex);
@@ -338,12 +332,11 @@ void writeblock(char *block, int blocknum) {
     }
     countOrder -= 1;
     smutex_unlock(&mutex);
-    
-    putToEnd(replaceIndex); // updates the orderArray
-    
+    putToEnd(replaceIndex);
     smutex_lock(&mutex);
     countOrder += 1;
     scond_broadcast(&orderZero, &mutex);
     scond_broadcast(&orderPositive, &mutex);
     smutex_unlock(&mutex);
+    
 }
