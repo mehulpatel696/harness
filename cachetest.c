@@ -19,7 +19,7 @@
 #define BLOCKSIZE sizeof(int)
 
 
-//Global Variables
+//Global Variabls for read and write 
 static int countOrder;
 static scond_t orderPositive;
 static scond_t orderZero;
